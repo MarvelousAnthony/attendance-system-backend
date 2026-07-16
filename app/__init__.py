@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.attendance import router as attendance_router
+from app.database import engine
+from app.models.base import Base
+import app.models  # Import all models to register them on the metadata
+
+# Automatically construct database schema in Supabase on startup
+Base.metadata.create_all(bind=engine)
 
 # Instantiate FastAPI application
 app = FastAPI(

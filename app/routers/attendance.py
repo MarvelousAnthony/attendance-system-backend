@@ -270,3 +270,153 @@ async def get_session_attendance(
     
     return records
 
+
+@router.post(
+    "/debug/seed",
+    status_code=status.HTTP_200_OK,
+    summary="Seed mock data for local/dev testing",
+)
+async def seed_data_endpoint(db: Session = Depends(get_db)):
+    """
+    Seed mock data (1 lecturer, 3 courses, 15 students, 4 weeks of historical logs) into the database.
+    """
+    import hashlib
+    import random
+    import datetime
+    
+    # Check if data already exists to prevent duplicate seeding
+    lecturer_check = db.query(User).filter(User.email == "e.vance@university.edu").first()
+    if lecturer_check:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Database has already been seeded"
+        )
+        
+    try:
+        # Seed Lecturer
+        lecturer = User(
+            name="Dr. Elizabeth Vance",
+            email="e.vance@university.edu",
+            hashed_password="hashed_lecturer_password_vance123",
+            role=UserRole.LECTURER,
+        )
+        db.add(lecturer)
+        db.commit()
+        db.refresh(lecturer)
+
+        # Seed Courses
+        courses = [
+            Course(
+                course_code="CS-402",
+                course_title="Distributed Systems & Cloud Computing",
+                lecturer_id=lecturer.id,
+            ),
+            Course(
+                course_code="CS-408",
+                course_title="Artificial Intelligence & Robotics",
+                lecturer_id=lecturer.id,
+            ),
+            Course(
+                course_code="CS-301",
+                course_title="Database Management Systems",
+                lecturer_id=lecturer.id,
+            ),
+        ]
+        db.add_all(courses)
+        db.commit()
+        for course in courses:
+            db.refresh(course)
+
+        # Seed Students
+        student_names = [
+            "Sarah Jenkins", "Michael Chen", "Emily Rodriguez", "David Kim", 
+            "Jessica Taylor", "James Wilson", "Amanda Martinez", "Robert Novak",
+            "Olivia Smith", "William Patel", "Sophia Muller", "Lucas Silva",
+            "John Doe", "Jane Miller", "Brian O'Conner"
+        ]
+        
+        students = []
+        for name in student_names:
+            first_name = name.split()[0].lower()
+            student = User(
+                name=name,
+                email=f"{first_name}.std@university.edu",
+                hashed_password=f"hashed_student_pwd_{first_name}123",
+                role=UserRole.STUDENT,
+            )
+            students.append(student)
+            
+        db.add_all(students)
+        db.commit()
+        for student in students:
+            db.refresh(student)
+
+        # Seed Attendance
+        campus_latitude = 37.774929
+        campus_longitude = -122.419416
+        allowed_radius = 50
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        for week in range(4):
+            weeks_ago = 4 - week
+            for course_idx, course in enumerate(courses):
+                session_date = now - datetime.timedelta(weeks=weeks_ago)
+                session_start = session_date.replace(
+                    hour=9 + course_idx * 2, minute=0, second=0, microsecond=0
+                )
+                session_end = session_start + datetime.timedelta(hours=1, minutes=30)
+
+                session = ClassSession(
+                    course_id=course.id,
+                    start_time=session_start,
+                    end_time=session_end,
+                    latitude=campus_latitude,
+                    longitude=campus_longitude,
+                    allowed_radius_meters=allowed_radius,
+                )
+                db.add(session)
+                db.commit()
+                db.refresh(session)
+
+                for student in students:
+                    rand = random.random()
+                    if rand < 0.80:
+                        status = AttendanceStatus.PRESENT
+                        check_in_offset = random.uniform(-5, 9)
+                        lat_offset = random.uniform(-0.0002, 0.0002)
+                        lon_offset = random.uniform(-0.0002, 0.0002)
+                    elif rand < 0.93:
+                        status = AttendanceStatus.LATE
+                        check_in_offset = random.uniform(11, 25)
+                        lat_offset = random.uniform(-0.0002, 0.0002)
+                        lon_offset = random.uniform(-0.0002, 0.0002)
+                    else:
+                        status = AttendanceStatus.ABSENT
+                        check_in_offset = random.uniform(-5, 45)
+                        lat_offset = random.uniform(0.002, 0.004) * random.choice([-1, 1])
+                        lon_offset = random.uniform(0.002, 0.004) * random.choice([-1, 1])
+
+                    check_in_time = session_start + datetime.timedelta(minutes=check_in_offset)
+                    fingerprint_seed = f"device_{student.name}_{course.course_code}_w{week}"
+                    device_hash = hashlib.sha256(fingerprint_seed.encode("utf-8")).hexdigest()[:16]
+
+                    attendance = AttendanceRecord(
+                        student_id=student.id,
+                        session_id=session.id,
+                        timestamp=check_in_time,
+                        status=status,
+                        device_hash=device_hash,
+                        student_latitude=campus_latitude + lat_offset,
+                        student_longitude=campus_longitude + lon_offset,
+                    )
+                    db.add(attendance)
+                db.commit()
+        return {"message": "Database seeded successfully!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Seeding failed: {str(e)}"
+        )
+
