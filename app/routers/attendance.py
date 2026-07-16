@@ -1,5 +1,7 @@
 import datetime
 import hashlib
+import json
+import io
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session
@@ -8,8 +10,6 @@ from sqlalchemy.orm import Session
 try:
     import face_recognition
     import numpy as np
-    import io
-    import json
     FACE_RECOGNITION_SUPPORTED = True
 except ImportError:
     FACE_RECOGNITION_SUPPORTED = False
