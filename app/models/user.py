@@ -52,6 +52,11 @@ class User(Base):
         nullable=False,
         doc="System role (lecturer or student)"
     )
+    face_encoding: Mapped[str | None] = mapped_column(
+        String(1024),
+        nullable=True,
+        doc="Secure S3/Cloud Storage path to the student's registered profile photo or serialized face encoding vector"
+    )
 
     # Bidirectional relationships
     courses: Mapped[List["Course"]] = relationship(
