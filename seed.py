@@ -56,17 +56,17 @@ def seed_database(db: Session):
     # 2. Seed 3 Courses
     courses = [
         Course(
-            course_code="CS-402",
+            course_code="CSE-402",
             course_title="Distributed Systems & Cloud Computing",
             lecturer_id=lecturer.id,
         ),
         Course(
-            course_code="CS-408",
+            course_code="CSE-408",
             course_title="Artificial Intelligence & Robotics",
             lecturer_id=lecturer.id,
         ),
         Course(
-            course_code="CS-301",
+            course_code="CSE-301",
             course_title="Database Management Systems",
             lecturer_id=lecturer.id,
         ),
