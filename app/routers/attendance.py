@@ -283,6 +283,32 @@ async def get_session_attendance(
 
 
 @router.post(
+    "/debug/reset",
+    status_code=status.HTTP_200_OK,
+    summary="Wipe dev database tables to allow clean re-seeding",
+)
+async def reset_database_endpoint(db: Session = Depends(get_db)):
+    """
+    Truncate all relational tables in cascade order to reset environment.
+    """
+    from sqlalchemy import text
+    try:
+        db.execute(text("TRUNCATE TABLE attendance_records CASCADE;"))
+        db.execute(text("TRUNCATE TABLE class_sessions CASCADE;"))
+        db.execute(text("TRUNCATE TABLE active_tokens CASCADE;"))
+        db.execute(text("TRUNCATE TABLE courses CASCADE;"))
+        db.execute(text("TRUNCATE TABLE users CASCADE;"))
+        db.commit()
+        return {"message": "Database reset successfully!"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database reset failed: {str(e)}"
+        )
+
+
+@router.post(
     "/debug/seed",
     status_code=status.HTTP_200_OK,
     summary="Seed mock data for local/dev testing",
