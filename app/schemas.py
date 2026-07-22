@@ -17,6 +17,8 @@ class SessionCreate(BaseModel):
     latitude: float = Field(..., description="Latitude coordinate of classroom center")
     longitude: float = Field(..., description="Longitude coordinate of classroom center")
     allowed_radius_meters: int = Field(..., description="Geofence boundary radius")
+    grace_period_minutes: int = Field(10, description="Grace period in minutes for PRESENT status")
+    late_period_minutes: int = Field(30, description="Lateness threshold in minutes for LATE status")
 
     @field_validator("latitude")
     @classmethod
@@ -37,6 +39,28 @@ class SessionCreate(BaseModel):
     def validate_radius(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("Allowed radius must be a positive integer greater than zero")
+        return v
+
+    @field_validator("grace_period_minutes")
+    @classmethod
+    def validate_grace_period(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("Grace period must be a positive integer greater than zero")
+        return v
+
+    @field_validator("late_period_minutes")
+    @classmethod
+    def validate_late_period(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("Late period must be a positive integer greater than zero")
+        return v
+
+    @field_validator("late_period_minutes")
+    @classmethod
+    def validate_time_thresholds(cls, v: int, info) -> int:
+        grace = info.data.get("grace_period_minutes")
+        if grace and v <= grace:
+            raise ValueError("late_period_minutes must be strictly greater than grace_period_minutes")
         return v
 
     @field_validator("end_time")
@@ -61,6 +85,8 @@ class SessionResponse(BaseModel):
     latitude: float
     longitude: float
     allowed_radius_meters: int
+    grace_period_minutes: int
+    late_period_minutes: int
 
 
 class TokenResponse(BaseModel):

@@ -54,6 +54,18 @@ class ClassSession(Base):
         nullable=False,
         doc="Radius in meters from classroom coordinates where student is allowed to mark attendance"
     )
+    grace_period_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10,
+        doc="Minutes after start_time when a student is still marked PRESENT"
+    )
+    late_period_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=30,
+        doc="Minutes after start_time when a student is marked LATE. Beyond this, check-in is closed."
+    )
 
     # Bidirectional relationships
     course: Mapped["Course"] = relationship(

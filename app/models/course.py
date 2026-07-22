@@ -33,6 +33,12 @@ class Course(Base):
         nullable=False,
         doc="Official title of the course"
     )
+    department: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="Computer Engineering",
+        doc="Academic department offering the course"
+    )
     lecturer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,

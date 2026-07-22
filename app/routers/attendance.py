@@ -64,6 +64,8 @@ async def create_session(
         latitude=payload.latitude,
         longitude=payload.longitude,
         allowed_radius_meters=payload.allowed_radius_meters,
+        grace_period_minutes=payload.grace_period_minutes,
+        late_period_minutes=payload.late_period_minutes,
     )
     
     db.add(new_session)
@@ -223,13 +225,20 @@ async def submit_attendance(
             detail="Attendance already submitted using this device in this session"
         )
 
-    # Determine attendance status based on session timing (e.g. late if past start time)
-    # Default to present for generic valid submissions, or compare current time to session parameters
+    # Calculate offset from session start time
     session_start_naive = session_record.start_time.replace(tzinfo=None)
-    status_now = AttendanceStatus.PRESENT
-    # If the student checks in 10 minutes or more past the session start, classify as LATE
     check_in_time_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    if check_in_time_naive > session_start_naive + datetime.timedelta(minutes=10):
+    time_offset_seconds = (check_in_time_naive - session_start_naive).total_seconds()
+    time_offset_minutes = time_offset_seconds / 60.0
+
+    if time_offset_minutes > session_record.late_period_minutes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Check-in failed: The attendance window has closed. The maximum checking-in time of {session_record.late_period_minutes} minutes has been exceeded."
+        )
+
+    status_now = AttendanceStatus.PRESENT
+    if time_offset_minutes > session_record.grace_period_minutes:
         status_now = AttendanceStatus.LATE
 
     # Create the attendance record
@@ -617,12 +626,28 @@ async def submit_attendance_with_face(
                     detail="Registered biometric data signature is corrupted."
                 )
 
+    # Calculate offset from session start time
+    session_start_naive = session_record.start_time.replace(tzinfo=None)
+    check_in_time_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    time_offset_seconds = (check_in_time_naive - session_start_naive).total_seconds()
+    time_offset_minutes = time_offset_seconds / 60.0
+
+    if time_offset_minutes > session_record.late_period_minutes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Check-in failed: The attendance window has closed. The maximum checking-in time of {session_record.late_period_minutes} minutes has been exceeded."
+        )
+
+    status_now = AttendanceStatus.PRESENT
+    if time_offset_minutes > session_record.grace_period_minutes:
+        status_now = AttendanceStatus.LATE
+
     # 8. Record Attendance
     attendance_record = AttendanceRecord(
         student_id=student.id,
         session_id=session_record.id,
         timestamp=datetime.datetime.now(datetime.timezone.utc),
-        status=AttendanceStatus.PRESENT,
+        status=status_now,
         device_hash=hashlib.sha256(f"{student.id}-{session_id}".encode()).hexdigest()[:16],
         student_latitude=student_latitude,
         student_longitude=student_longitude,

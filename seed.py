@@ -59,16 +59,19 @@ def seed_database(db: Session):
             course_code="CSE-402",
             course_title="Distributed Systems & Cloud Computing",
             lecturer_id=lecturer.id,
+            department="Computer Engineering",
         ),
         Course(
             course_code="CSE-408",
             course_title="Artificial Intelligence & Robotics",
             lecturer_id=lecturer.id,
+            department="Computer Engineering",
         ),
         Course(
             course_code="CSE-301",
             course_title="Database Management Systems",
             lecturer_id=lecturer.id,
+            department="Computer Science",
         ),
     ]
     db.add_all(courses)
@@ -134,6 +137,8 @@ def seed_database(db: Session):
                 latitude=campus_latitude,
                 longitude=campus_longitude,
                 allowed_radius_meters=allowed_radius,
+                grace_period_minutes=10,
+                late_period_minutes=30,
             )
             db.add(session)
             db.commit()
