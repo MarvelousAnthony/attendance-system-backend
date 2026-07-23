@@ -664,6 +664,26 @@ async def submit_attendance_with_face(
     return attendance_record
 
 
+@router.get(
+    "/courses",
+    summary="Get all registered courses from database",
+)
+async def get_courses(db: Session = Depends(get_db)):
+    """
+    Returns a list of all courses currently saved in the database.
+    """
+    courses = db.query(Course).all()
+    return [
+        {
+            "id": str(course.id),
+            "code": course.course_code,
+            "title": course.course_title,
+            "department": course.department,
+        }
+        for course in courses
+    ]
+
+
 @router.post(
     "/students/onboard",
     response_model=UserResponse,
