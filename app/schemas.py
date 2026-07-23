@@ -136,3 +136,22 @@ class AttendanceResponse(BaseModel):
     device_hash: str
     student_latitude: float
     student_longitude: float
+
+
+class StudentOnboardRequest(BaseModel):
+    name: str = Field(..., description="Student full name")
+    email: str = Field(..., description="Student email address")
+    student_id: str = Field(..., description="Student matric number (e.g. 23/0987)")
+    department: str = Field(..., description="Student department name")
+    face_encoding: str = Field(..., description="Serialized JSON array of facial encoding vector")
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    email: str
+    role: str
+    student_id: str | None = None
+    face_encoding: str | None = None

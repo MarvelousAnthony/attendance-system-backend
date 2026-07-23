@@ -27,6 +27,8 @@ from app.schemas import (
     TokenResponse,
     CheckInRequest,
     AttendanceResponse,
+    StudentOnboardRequest,
+    UserResponse,
 )
 from app.utils.geo import calculate_haversine_distance
 from app.utils.security import create_session_jwt, decode_session_jwt, hash_token
@@ -660,4 +662,57 @@ async def submit_attendance_with_face(
     db.refresh(attendance_record)
 
     return attendance_record
+
+
+@router.post(
+    "/students/onboard",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register or update student biometric profile",
+)
+async def onboard_student(
+    payload: StudentOnboardRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Onboards a student by creating their user record (or updating their face encoding if they already exist).
+    """
+    # 1. Check if user already exists by email
+    student = db.query(User).filter(User.email == payload.email).first()
+    
+    if student:
+        # If user exists, update details
+        student.name = payload.name
+        student.student_id = payload.student_id
+        student.face_encoding = payload.face_encoding
+    else:
+        # Check if student_id is already used by someone else
+        existing_id = db.query(User).filter(User.student_id == payload.student_id).first()
+        if existing_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A student with this Matric Number is already registered."
+            )
+            
+        # Create new student user
+        student = User(
+            name=payload.name,
+            email=payload.email,
+            student_id=payload.student_id,
+            role=UserRole.STUDENT,
+            face_encoding=payload.face_encoding,
+            hashed_password="hashed_student_registered_password", # dummy password for self-registration
+        )
+        db.add(student)
+        
+    try:
+        db.commit()
+        db.refresh(student)
+        return student
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
 
