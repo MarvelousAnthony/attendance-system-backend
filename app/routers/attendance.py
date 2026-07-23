@@ -684,6 +684,55 @@ async def get_courses(db: Session = Depends(get_db)):
     ]
 
 
+class CourseCreateRequest(BaseModel):
+    course_code: str
+    course_title: str
+    department: str
+
+
+@router.post(
+    "/courses",
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a new course to database",
+)
+async def create_course(
+    payload: CourseCreateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Creates a new course in the database, automatically linking it to the default lecturer.
+    """
+    # 1. Look up the default console lecturer
+    lecturer = db.query(User).filter(User.email == "elizabeth.vance@university.edu").first()
+    if not lecturer:
+        # Fallback to any lecturer in database
+        lecturer = db.query(User).filter(User.role == UserRole.LECTURER).first()
+
+    new_course = Course(
+        course_code=payload.course_code,
+        course_title=payload.course_title,
+        department=payload.department,
+        lecturer_id=lecturer.id if lecturer else None,
+    )
+    db.add(new_course)
+    
+    try:
+        db.commit()
+        db.refresh(new_course)
+        return {
+            "id": str(new_course.id),
+            "code": new_course.course_code,
+            "title": new_course.course_title,
+            "department": new_course.department,
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Course creation failed: {str(e)}"
+        )
+
+
 @router.post(
     "/students/onboard",
     response_model=UserResponse,
