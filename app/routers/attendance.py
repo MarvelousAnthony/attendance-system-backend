@@ -785,3 +785,83 @@ async def onboard_student(
             detail=f"Registration failed: {str(e)}"
         )
 
+
+class LecturerRegisterRequest(BaseModel):
+    name: str = Field(..., description="Lecturer full name")
+    email: str = Field(..., description="Lecturer email address")
+    password: str = Field(..., description="Lecturer password")
+
+
+class LecturerLoginRequest(BaseModel):
+    email: str = Field(..., description="Lecturer email address")
+    password: str = Field(..., description="Lecturer password")
+
+
+@router.post(
+    "/lecturers/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new lecturer",
+)
+async def register_lecturer(
+    payload: LecturerRegisterRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Check if email already registered
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email address is already registered."
+        )
+
+    # 2. Hash password and save new User
+    hashed_pwd = hash_token(payload.password)
+    new_lecturer = User(
+        name=payload.name,
+        email=payload.email,
+        hashed_password=hashed_pwd,
+        role=UserRole.LECTURER,
+    )
+    db.add(new_lecturer)
+
+    try:
+        db.commit()
+        db.refresh(new_lecturer)
+        return new_lecturer
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lecturer registration failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/lecturers/login",
+    response_model=UserResponse,
+    summary="Authenticate lecturer credentials",
+)
+async def login_lecturer(
+    payload: LecturerLoginRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Find user by email
+    lecturer = db.query(User).filter(User.email == payload.email).first()
+    if not lecturer or lecturer.role != UserRole.LECTURER:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid lecturer email or credentials."
+        )
+
+    # 2. Verify hashed password
+    incoming_hash = hash_token(payload.password)
+    # Support both hashed passwords and seeded cleartext passwords for development testing
+    if lecturer.hashed_password != incoming_hash and lecturer.hashed_password != payload.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password. Please check your credentials."
+        )
+
+    return lecturer
+
