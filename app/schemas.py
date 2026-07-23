@@ -19,6 +19,7 @@ class SessionCreate(BaseModel):
     allowed_radius_meters: int = Field(..., description="Geofence boundary radius")
     grace_period_minutes: int = Field(10, description="Grace period in minutes for PRESENT status")
     late_period_minutes: int = Field(30, description="Lateness threshold in minutes for LATE status")
+    require_double_signing: bool = Field(False, description="Flag indicating if check-out is required")
 
     @field_validator("latitude")
     @classmethod
@@ -87,6 +88,8 @@ class SessionResponse(BaseModel):
     allowed_radius_meters: int
     grace_period_minutes: int
     late_period_minutes: int
+    require_double_signing: bool
+    is_checkout_open: bool
 
 
 class TokenResponse(BaseModel):
@@ -132,6 +135,7 @@ class AttendanceResponse(BaseModel):
     student_id: UUID
     session_id: UUID
     timestamp: datetime.datetime
+    checked_out_at: datetime.datetime | None
     status: AttendanceStatus
     device_hash: str
     student_latitude: float

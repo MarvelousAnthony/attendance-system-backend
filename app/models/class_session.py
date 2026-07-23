@@ -66,6 +66,16 @@ class ClassSession(Base):
         default=30,
         doc="Minutes after start_time when a student is marked LATE. Beyond this, check-in is closed."
     )
+    require_double_signing: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        doc="Flag indicating if check-out scanning at the end of class is required"
+    )
+    is_checkout_open: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        doc="Flag indicating if the session is currently in check-out scan mode"
+    )
 
     # Bidirectional relationships
     course: Mapped["Course"] = relationship(

@@ -19,6 +19,7 @@ class AttendanceStatus(str, enum.Enum):
     PRESENT = "present"
     LATE = "late"
     ABSENT = "absent"
+    INCOMPLETE = "incomplete"
 
 
 class AttendanceRecord(Base):
@@ -47,7 +48,12 @@ class AttendanceRecord(Base):
         DateTime(timezone=True),
         default=lambda: datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
-        doc="Time when attendance was marked"
+        doc="Time when attendance check-in was marked"
+    )
+    checked_out_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        doc="Time when attendance check-out was marked"
     )
     status: Mapped[AttendanceStatus] = mapped_column(
         Enum(AttendanceStatus),

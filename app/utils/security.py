@@ -18,7 +18,7 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_session_jwt(session_id: uuid.UUID) -> tuple[str, datetime.datetime]:
+def create_session_jwt(session_id: uuid.UUID, is_checkout: bool = False) -> tuple[str, datetime.datetime]:
     """
     Generates a dynamic JWT containing the session ID and a precise 15-second expiration.
     Returns the encoded JWT token and its expiration timestamp.
@@ -28,6 +28,7 @@ def create_session_jwt(session_id: uuid.UUID) -> tuple[str, datetime.datetime]:
     
     payload = {
         "session_id": str(session_id),
+        "is_checkout": is_checkout,
         "iat": now,
         "exp": expires_at
     }
@@ -36,7 +37,7 @@ def create_session_jwt(session_id: uuid.UUID) -> tuple[str, datetime.datetime]:
     return token, expires_at
 
 
-def decode_session_jwt(token: str) -> uuid.UUID:
+def decode_session_jwt(token: str) -> tuple[uuid.UUID, bool]:
     """
     Decodes and validates the signature and expiration of a session JWT.
     
@@ -47,6 +48,7 @@ def decode_session_jwt(token: str) -> uuid.UUID:
         # Decode checks exp expiration internally
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         session_id_str = payload.get("session_id")
+        is_checkout = payload.get("is_checkout", False)
         
         if not session_id_str:
             raise HTTPException(
@@ -54,7 +56,7 @@ def decode_session_jwt(token: str) -> uuid.UUID:
                 detail="Token payload is missing session_id"
             )
             
-        return uuid.UUID(session_id_str)
+        return uuid.UUID(session_id_str), is_checkout
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(

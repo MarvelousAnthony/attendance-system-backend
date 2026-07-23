@@ -58,7 +58,6 @@ async def create_session(
             detail=f"Course with ID {payload.course_id} does not exist"
         )
 
-    # Instantiate class session
     new_session = ClassSession(
         course_id=payload.course_id,
         start_time=payload.start_time,
@@ -68,6 +67,8 @@ async def create_session(
         allowed_radius_meters=payload.allowed_radius_meters,
         grace_period_minutes=payload.grace_period_minutes,
         late_period_minutes=payload.late_period_minutes,
+        require_double_signing=payload.require_double_signing,
+        is_checkout_open=False,
     )
     
     db.add(new_session)
@@ -106,8 +107,8 @@ async def get_session_token(
             detail="Cannot generate token. Class session has already ended"
         )
 
-    # Generate the JWT
-    token_str, expires_at = create_session_jwt(session_id)
+    # Generate the JWT with check-out claim if active
+    token_str, expires_at = create_session_jwt(session_id, is_checkout=session_record.is_checkout_open)
     token_signature_hash = hash_token(token_str)
 
     # Save active token to database to ensure validity tracking
@@ -137,7 +138,7 @@ async def submit_attendance(
     computes geo-fence limits, and verifies device constraints.
     """
     # 1. JWT Signature decoding and expiration validation
-    session_id = decode_session_jwt(payload.token)
+    session_id, is_checkout_token = decode_session_jwt(payload.token)
 
     # 2. Database active token tracking check (prevents replay attacks/forgery)
     token_signature_hash = hash_token(payload.token)
@@ -203,65 +204,146 @@ async def submit_attendance(
             )
         )
 
-    # 5. Database constraint check: unique student submission per session
-    existing_student_record = db.query(AttendanceRecord).filter(
-        AttendanceRecord.session_id == session_id,
-        AttendanceRecord.student_id == payload.student_id
-    ).first()
-    
-    if existing_student_record:
+    # 5. Handle Check-In vs Check-Out depending on token mode
+    if is_checkout_token:
+        # Check-Out Flow
+        if not session_record.require_double_signing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Check-out failed: This session does not require double signing."
+            )
+        
+        if not session_record.is_checkout_open:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Check-out failed: The lecturer has not opened check-out scanning for this session yet."
+            )
+        
+        existing_record = db.query(AttendanceRecord).filter(
+            AttendanceRecord.session_id == session_id,
+            AttendanceRecord.student_id == payload.student_id
+        ).first()
+        
+        if not existing_record:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Check-out failed: You must check-in at the beginning of the class first."
+            )
+            
+        if existing_record.status != AttendanceStatus.INCOMPLETE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You have already checked out and completed attendance for this session."
+            )
+            
+        # Update check-out timestamp
+        existing_record.checked_out_at = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Calculate final attendance status based on check-in time (timestamp)
+        check_in_time_naive = existing_record.timestamp.replace(tzinfo=None)
+        session_start_naive = session_record.start_time.replace(tzinfo=None)
+        time_offset_minutes = (check_in_time_naive - session_start_naive).total_seconds() / 60.0
+        
+        final_status = AttendanceStatus.PRESENT
+        if time_offset_minutes > session_record.grace_period_minutes:
+            final_status = AttendanceStatus.LATE
+            
+        existing_record.status = final_status
+        db.delete(active_token)
+        db.commit()
+        db.refresh(existing_record)
+        return existing_record
+
+    else:
+        # Check-In Flow
+        existing_student_record = db.query(AttendanceRecord).filter(
+            AttendanceRecord.session_id == session_id,
+            AttendanceRecord.student_id == payload.student_id
+        ).first()
+        
+        if existing_student_record:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Attendance check-in already submitted for this student in this session."
+            )
+            
+        # Unique submission per device per session
+        existing_device_record = db.query(AttendanceRecord).filter(
+            AttendanceRecord.session_id == session_id,
+            AttendanceRecord.device_hash == payload.device_hash
+        ).first()
+        if existing_device_record:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Attendance already submitted using this device in this session."
+            )
+            
+        # Calculate check-in time bounds
+        session_start_naive = session_record.start_time.replace(tzinfo=None)
+        check_in_time_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        time_offset_minutes = (check_in_time_naive - session_start_naive).total_seconds() / 60.0
+        
+        if time_offset_minutes > session_record.late_period_minutes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Check-in failed: The attendance window has closed. The maximum checking-in time of {session_record.late_period_minutes} minutes has been exceeded."
+            )
+            
+        # Determine status (if double signing is required, set to INCOMPLETE first)
+        if session_record.require_double_signing:
+            status_now = AttendanceStatus.INCOMPLETE
+        else:
+            status_now = AttendanceStatus.PRESENT
+            if time_offset_minutes > session_record.grace_period_minutes:
+                status_now = AttendanceStatus.LATE
+                
+        # Create check-in record
+        attendance_record = AttendanceRecord(
+            student_id=payload.student_id,
+            session_id=session_id,
+            status=status_now,
+            device_hash=payload.device_hash,
+            student_latitude=payload.student_latitude,
+            student_longitude=payload.student_longitude,
+        )
+        db.add(attendance_record)
+        
+        # Clean up active token
+        db.delete(active_token)
+        db.commit()
+        db.refresh(attendance_record)
+        return attendance_record
+
+
+@router.post(
+    "/sessions/{session_id}/checkout/open",
+    response_model=SessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Open checkout scanning for the session",
+)
+async def open_checkout_scanning(
+    session_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Flips the session's is_checkout_open flag to True, allowing check-out QR scans to begin.
+    """
+    session_record = db.query(ClassSession).filter(ClassSession.id == session_id).first()
+    if not session_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    if not session_record.require_double_signing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Attendance already submitted for this student in this session"
+            detail="Double signing is not required for this session"
         )
-
-    # 6. Database constraint check: unique submission per device per session
-    existing_device_record = db.query(AttendanceRecord).filter(
-        AttendanceRecord.session_id == session_id,
-        AttendanceRecord.device_hash == payload.device_hash
-    ).first()
-
-    if existing_device_record:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Attendance already submitted using this device in this session"
-        )
-
-    # Calculate offset from session start time
-    session_start_naive = session_record.start_time.replace(tzinfo=None)
-    check_in_time_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    time_offset_seconds = (check_in_time_naive - session_start_naive).total_seconds()
-    time_offset_minutes = time_offset_seconds / 60.0
-
-    if time_offset_minutes > session_record.late_period_minutes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Check-in failed: The attendance window has closed. The maximum checking-in time of {session_record.late_period_minutes} minutes has been exceeded."
-        )
-
-    status_now = AttendanceStatus.PRESENT
-    if time_offset_minutes > session_record.grace_period_minutes:
-        status_now = AttendanceStatus.LATE
-
-    # Create the attendance record
-    attendance_record = AttendanceRecord(
-        student_id=payload.student_id,
-        session_id=session_id,
-        status=status_now,
-        device_hash=payload.device_hash,
-        student_latitude=payload.student_latitude,
-        student_longitude=payload.student_longitude,
-    )
-
-    db.add(attendance_record)
     
-    # Clean up token database-side to prevent any form of token replay/re-use
-    db.delete(active_token)
-    
+    session_record.is_checkout_open = True
     db.commit()
-    db.refresh(attendance_record)
-
-    return attendance_record
+    db.refresh(session_record)
+    return session_record
 
 
 @router.get(
