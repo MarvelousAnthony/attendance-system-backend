@@ -333,7 +333,7 @@ async def seed_data_endpoint(db: Session = Depends(get_db)):
     import datetime
     
     # Check if data already exists to prevent duplicate seeding
-    lecturer_check = db.query(User).filter(User.email == "e.vance@university.edu").first()
+    lecturer_check = db.query(User).filter(User.email == "elizabeth.vance@university.edu").first()
     if lecturer_check:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -341,11 +341,11 @@ async def seed_data_endpoint(db: Session = Depends(get_db)):
         )
         
     try:
-        # Seed Lecturer
+        # Seed Lecturer (with password: password)
         lecturer = User(
             name="Dr. Elizabeth Vance",
-            email="e.vance@university.edu",
-            hashed_password="hashed_lecturer_password_vance123",
+            email="elizabeth.vance@university.edu",
+            hashed_password=hash_token("password"),
             role=UserRole.LECTURER,
         )
         db.add(lecturer)
