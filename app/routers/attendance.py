@@ -945,3 +945,32 @@ async def login_lecturer(
 
     return lecturer
 
+
+class StudentLoginRequest(BaseModel):
+    identifier: str = Field(..., description="Student email address or Matric/Student ID")
+
+
+@router.post(
+    "/students/login",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Login student by email or student ID",
+)
+async def login_student(
+    payload: StudentLoginRequest,
+    db: Session = Depends(get_db)
+):
+    identifier = payload.identifier.strip()
+    student = db.query(User).filter(
+        ((User.email == identifier) | (User.student_id == identifier)) & 
+        (User.role == UserRole.STUDENT)
+    ).first()
+    
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student profile not found. Please check your details or register first."
+        )
+        
+    return student
+
