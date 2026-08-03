@@ -3,6 +3,7 @@ import hashlib
 import json
 import io
 from uuid import UUID
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
