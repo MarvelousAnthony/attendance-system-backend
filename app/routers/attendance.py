@@ -872,6 +872,7 @@ class LecturerRegisterRequest(BaseModel):
     name: str = Field(..., description="Lecturer full name")
     email: str = Field(..., description="Lecturer email address")
     password: str = Field(..., description="Lecturer password")
+    access_code: str = Field(..., description="Lecturer signup authorization access code")
 
 
 class LecturerLoginRequest(BaseModel):
@@ -889,6 +890,13 @@ async def register_lecturer(
     payload: LecturerRegisterRequest,
     db: Session = Depends(get_db)
 ):
+    # 0. Verify access code
+    if payload.access_code.strip() != "LECTURER2026":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid lecturer signup access code. Please contact school administration."
+        )
+
     # 1. Check if email already registered
     existing_user = db.query(User).filter(User.email == payload.email).first()
     if existing_user:
