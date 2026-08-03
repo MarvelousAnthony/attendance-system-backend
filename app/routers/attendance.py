@@ -391,7 +391,49 @@ async def reset_database_endpoint(db: Session = Depends(get_db)):
     try:
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
-        return {"message": "Database reset successfully!"}
+        
+        # 1. Seed default Admin (admin@university.edu / password)
+        admin = User(
+            name="System Administrator",
+            email="admin@university.edu",
+            hashed_password=hash_token("password"),
+            role=UserRole.ADMIN,
+        )
+        db.add(admin)
+        
+        # 2. Seed default Lecturer (elizabeth.vance@university.edu / password)
+        lecturer = User(
+            name="Dr. Elizabeth Vance",
+            email="elizabeth.vance@university.edu",
+            hashed_password=hash_token("password"),
+            role=UserRole.LECTURER,
+        )
+        db.add(lecturer)
+        db.commit()
+        db.refresh(lecturer)
+
+        # 3. Seed default Courses
+        courses = [
+            Course(
+                course_code="CSE-402",
+                course_title="Distributed Systems & Cloud Computing",
+                lecturer_id=lecturer.id,
+            ),
+            Course(
+                course_code="CSE-408",
+                course_title="Artificial Intelligence & Robotics",
+                lecturer_id=lecturer.id,
+            ),
+            Course(
+                course_code="CSE-301",
+                course_title="Database Management Systems",
+                lecturer_id=lecturer.id,
+            ),
+        ]
+        db.add_all(courses)
+        db.commit()
+
+        return {"message": "Database reset and seeded successfully!"}
     except Exception as e:
         db.rollback()
         raise HTTPException(
