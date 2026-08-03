@@ -189,21 +189,22 @@ async def submit_attendance(
         )
 
     # 4. Pure mathematical implementation of the Haversine formula
-    distance_meters = calculate_haversine_distance(
-        lat1=session_record.latitude,
-        lon1=session_record.longitude,
-        lat2=payload.student_latitude,
-        lon2=payload.student_longitude,
-    )
-
-    if distance_meters > session_record.allowed_radius_meters:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Location verification failed. Student is outside the allowed geofence. "
-                f"Distance: {distance_meters:.2f}m. Maximum allowed: {session_record.allowed_radius_meters}m"
-            )
+    if session_record.allowed_radius_meters < 999999:
+        distance_meters = calculate_haversine_distance(
+            lat1=session_record.latitude,
+            lon1=session_record.longitude,
+            lat2=payload.student_latitude,
+            lon2=payload.student_longitude,
         )
+
+        if distance_meters > session_record.allowed_radius_meters:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Location verification failed. Student is outside the allowed geofence. "
+                    f"Distance: {distance_meters:.2f}m. Maximum allowed: {session_record.allowed_radius_meters}m"
+                )
+            )
 
     # 5. Handle Check-In vs Check-Out depending on token mode
     if is_checkout_token:
@@ -621,18 +622,19 @@ async def submit_attendance_with_face(
             detail="Check-in failed: User does not have student permissions."
         )
 
-    # 5. Geofencing Coordinates Check (Haversine distance <= 50 meters)
-    distance = calculate_haversine_distance(
-        session_record.latitude,
-        session_record.longitude,
-        student_latitude,
-        student_longitude
-    )
-    if distance > 50:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Location verification failed: Student is outside the classroom bounds. Distance: {distance:.1f}m. Maximum allowed: 50.0m"
+    # 5. Geofencing Coordinates Check (Haversine distance <= allowed_radius)
+    if session_record.allowed_radius_meters < 999999:
+        distance = calculate_haversine_distance(
+            session_record.latitude,
+            session_record.longitude,
+            student_latitude,
+            student_longitude
         )
+        if distance > session_record.allowed_radius_meters:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Location verification failed: Student is outside the classroom bounds. Distance: {distance:.1f}m. Maximum allowed: {session_record.allowed_radius_meters}m"
+            )
 
     # 6. Verify Duplicate Check-In
     duplicate_attendance = db.query(AttendanceRecord).filter(
