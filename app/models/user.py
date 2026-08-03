@@ -1,7 +1,7 @@
 import enum
 import uuid
 from typing import List, TYPE_CHECKING
-from sqlalchemy import Enum, String
+from sqlalchemy import Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -53,7 +53,7 @@ class User(Base):
         doc="System role (lecturer or student)"
     )
     face_encoding: Mapped[str | None] = mapped_column(
-        String(1024),
+        Text,
         nullable=True,
         doc="Secure S3/Cloud Storage path to the student's registered profile photo or serialized face encoding vector"
     )
