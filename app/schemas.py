@@ -153,7 +153,7 @@ class StudentOnboardRequest(BaseModel):
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    id: UUID
     name: str
     email: str
     role: str
