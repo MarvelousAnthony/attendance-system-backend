@@ -41,6 +41,19 @@ def seed_database(db: Session):
     """
     print("\nStarting Seeding Routine...")
 
+    # 0. Seed Administrator
+    hashed_admin_pwd = hashlib.sha256("password".encode("utf-8")).hexdigest()
+    admin = User(
+        name="System Administrator",
+        email="admin@university.edu",
+        hashed_password=hashed_admin_pwd,
+        role=UserRole.ADMIN,
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    print(f"✓ Seeded Administrator: {admin.name} (Email: {admin.email})")
+
     # 1. Seed Lecturer
     lecturer = User(
         name="Dr. Elizabeth Vance",

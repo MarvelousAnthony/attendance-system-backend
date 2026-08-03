@@ -15,6 +15,7 @@ class UserRole(str, enum.Enum):
     """
     Roles available to system users.
     """
+    ADMIN = "admin"
     LECTURER = "lecturer"
     STUDENT = "student"
 

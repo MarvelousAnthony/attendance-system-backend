@@ -984,3 +984,82 @@ async def login_student(
         
     return student
 
+
+class AdminRegisterRequest(BaseModel):
+    name: str = Field(..., description="Admin full name")
+    email: str = Field(..., description="Admin email address")
+    password: str = Field(..., description="Admin password")
+
+
+class AdminLoginRequest(BaseModel):
+    email: str = Field(..., description="Admin email address")
+    password: str = Field(..., description="Admin password")
+
+
+@router.post(
+    "/admins/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new administrator",
+)
+async def register_admin(
+    payload: AdminRegisterRequest,
+    db: Session = Depends(get_db)
+):
+    # Check if email already registered
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email address is already registered."
+        )
+
+    # Hash password and save new User
+    hashed_pwd = hash_token(payload.password)
+    new_admin = User(
+        name=payload.name,
+        email=payload.email,
+        hashed_password=hashed_pwd,
+        role=UserRole.ADMIN,
+    )
+    db.add(new_admin)
+
+    try:
+        db.commit()
+        db.refresh(new_admin)
+        return new_admin
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Administrator registration failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/admins/login",
+    response_model=UserResponse,
+    summary="Authenticate administrator credentials",
+)
+async def login_admin(
+    payload: AdminLoginRequest,
+    db: Session = Depends(get_db)
+):
+    # Find user by email
+    admin = db.query(User).filter((User.email == payload.email) & (User.role == UserRole.ADMIN)).first()
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid administrator email or credentials."
+        )
+
+    # Verify password
+    incoming_hash = hash_token(payload.password)
+    if admin.hashed_password != incoming_hash and admin.hashed_password != payload.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password. Please check your credentials."
+        )
+
+    return admin
+
