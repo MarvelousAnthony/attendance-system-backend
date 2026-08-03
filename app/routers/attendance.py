@@ -383,16 +383,13 @@ async def get_session_attendance(
 )
 async def reset_database_endpoint(db: Session = Depends(get_db)):
     """
-    Truncate all relational tables in cascade order to reset environment.
+    Drop and recreate all tables to apply schema migrations and reset environment.
     """
-    from sqlalchemy import text
+    from app.models.base import Base
+    from app.database import engine
     try:
-        db.execute(text("TRUNCATE TABLE attendance_records CASCADE;"))
-        db.execute(text("TRUNCATE TABLE class_sessions CASCADE;"))
-        db.execute(text("TRUNCATE TABLE active_tokens CASCADE;"))
-        db.execute(text("TRUNCATE TABLE courses CASCADE;"))
-        db.execute(text("TRUNCATE TABLE users CASCADE;"))
-        db.commit()
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
         return {"message": "Database reset successfully!"}
     except Exception as e:
         db.rollback()
