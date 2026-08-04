@@ -815,6 +815,54 @@ async def get_courses(db: Session = Depends(get_db)):
     ]
 
 
+@router.get(
+    "/students/{student_id}/attendance-summary",
+    summary="Get course-by-course attendance summary for a student",
+)
+async def get_student_attendance_summary(
+    student_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Computes dynamic course-by-course attendance rates based on real live sessions created
+    by lecturers and actual check-ins completed by the student.
+    """
+    student = db.query(User).filter(User.id == student_id, User.role == UserRole.STUDENT).first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found"
+        )
+
+    courses = db.query(Course).all()
+    summary = []
+    
+    for course in courses:
+        # Count total class sessions held for this course
+        total_sessions = db.query(ClassSession).filter(ClassSession.course_id == course.id).count()
+        
+        # Count sessions successfully checked into by this student
+        attended_sessions = db.query(AttendanceRecord).join(ClassSession).filter(
+            AttendanceRecord.student_id == student_id,
+            ClassSession.course_id == course.id,
+            AttendanceRecord.status != AttendanceStatus.INCOMPLETE
+        ).count()
+        
+        percentage = 100
+        if total_sessions > 0:
+            percentage = int((attended_sessions / total_sessions) * 100)
+            
+        summary.append({
+            "course_code": course.course_code,
+            "course_title": course.course_title,
+            "attended": attended_sessions,
+            "total": total_sessions,
+            "percentage": percentage
+        })
+        
+    return summary
+
+
 class CourseCreateRequest(BaseModel):
     course_code: str
     course_title: str
