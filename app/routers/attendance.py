@@ -269,16 +269,7 @@ async def submit_attendance(
                 detail="Attendance check-in already submitted for this student in this session."
             )
             
-        # Unique submission per device per session
-        existing_device_record = db.query(AttendanceRecord).filter(
-            AttendanceRecord.session_id == session_id,
-            AttendanceRecord.device_hash == payload.device_hash
-        ).first()
-        if existing_device_record:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Attendance already submitted using this device in this session."
-            )
+
             
         # Calculate check-in time bounds
         session_start_naive = session_record.start_time.replace(tzinfo=None)
