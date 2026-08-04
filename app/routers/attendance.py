@@ -863,6 +863,76 @@ async def get_student_attendance_summary(
     return summary
 
 
+@router.get(
+    "/students",
+    summary="Get all registered students and their attendance metrics for admin",
+)
+async def get_all_students(db: Session = Depends(get_db)):
+    """
+    Returns a list of all registered students in the database with their overall attendance.
+    """
+    students = db.query(User).filter(User.role == UserRole.STUDENT).all()
+    
+    response_data = []
+    for student in students:
+        total_sessions = db.query(ClassSession).count()
+        attended_sessions = db.query(AttendanceRecord).filter(
+            AttendanceRecord.student_id == student.id,
+            AttendanceRecord.status != AttendanceStatus.INCOMPLETE
+        ).count()
+        
+        percentage = 100
+        if total_sessions > 0:
+            percentage = int((attended_sessions / total_sessions) * 100)
+            
+        response_data.append({
+            "id": str(student.id),
+            "name": student.name,
+            "email": student.email,
+            "student_id": student.student_id or "N/A",
+            "matricNo": student.student_id or "N/A",
+            "department": student.department or "Computer Engineering",
+            "percentage": percentage,
+            "attended": attended_sessions,
+            "total": total_sessions
+        })
+        
+    return response_data
+
+
+@router.get(
+    "/students/{student_id}/attendance",
+    summary="Get detailed attendance check-in history for a student",
+)
+async def get_student_attendance_history(
+    student_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all successful attendance check-in records for a specific student,
+    joined with course details.
+    """
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.student_id == student_id,
+        AttendanceRecord.status != AttendanceStatus.INCOMPLETE
+    ).order_by(AttendanceRecord.timestamp.desc()).all()
+    
+    response_data = []
+    for record in records:
+        session_obj = record.session
+        course = session_obj.course if session_obj else None
+        response_data.append({
+            "id": str(record.id),
+            "timestamp": record.timestamp.isoformat(),
+            "status": record.status,
+            "courseCode": course.course_code if course else "Unknown",
+            "courseTitle": course.course_title if course else "Unknown Course",
+            "course_code": course.course_code if course else "Unknown",
+            "course_title": course.course_title if course else "Unknown Course",
+        })
+    return response_data
+
+
 class CourseCreateRequest(BaseModel):
     course_code: str
     course_title: str
