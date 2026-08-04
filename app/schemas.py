@@ -140,6 +140,8 @@ class AttendanceResponse(BaseModel):
     device_hash: str
     student_latitude: float
     student_longitude: float
+    student_name: str | None = None
+    student_matric_no: str | None = None
 
 
 class StudentOnboardRequest(BaseModel):

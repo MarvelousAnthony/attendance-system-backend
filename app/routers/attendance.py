@@ -374,7 +374,23 @@ async def get_session_attendance(
         AttendanceRecord.session_id == session_id
     ).order_by(AttendanceRecord.timestamp.desc()).all()
     
-    return records
+    response_data = []
+    for record in records:
+        student_user = record.student
+        response_data.append({
+            "id": record.id,
+            "student_id": record.student_id,
+            "session_id": record.session_id,
+            "timestamp": record.timestamp,
+            "checked_out_at": record.checked_out_at,
+            "status": record.status,
+            "device_hash": record.device_hash,
+            "student_latitude": record.student_latitude,
+            "student_longitude": record.student_longitude,
+            "student_name": student_user.name if student_user else "Unknown Student",
+            "student_matric_no": student_user.student_id if student_user else "N/A",
+        })
+    return response_data
 
 
 @router.post(
