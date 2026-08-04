@@ -891,7 +891,7 @@ async def get_all_students(db: Session = Depends(get_db)):
             "email": student.email,
             "student_id": student.student_id or "N/A",
             "matricNo": student.student_id or "N/A",
-            "department": student.department or "Computer Engineering",
+            "department": "Computer Engineering",
             "percentage": percentage,
             "attended": attended_sessions,
             "total": total_sessions
