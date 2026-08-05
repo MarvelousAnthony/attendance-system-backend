@@ -8,6 +8,20 @@ import app.models  # Import all models to register them on the metadata
 # Automatically construct database schema in Supabase on startup
 Base.metadata.create_all(bind=engine)
 
+# Auto-migrate: check and add department column to users table if missing
+from sqlalchemy import text
+with engine.connect() as conn:
+    try:
+        conn.execute(text("SELECT department FROM users LIMIT 1"))
+    except Exception:
+        conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(100)"))
+            conn.commit()
+            print("Successfully auto-migrated users table: added department column")
+        except Exception as e:
+            print("Failed to auto-migrate users table:", e)
+
 # Instantiate FastAPI application
 app = FastAPI(
     title="Automated Attendance Management System API",

@@ -891,7 +891,7 @@ async def get_all_students(db: Session = Depends(get_db)):
             "email": student.email,
             "student_id": student.student_id or "N/A",
             "matricNo": student.student_id or "N/A",
-            "department": "Computer Engineering",
+            "department": student.department or "Computer Science",
             "percentage": percentage,
             "attended": attended_sessions,
             "total": total_sessions
@@ -1003,6 +1003,7 @@ async def onboard_student(
         student.name = payload.name
         student.student_id = payload.student_id
         student.face_encoding = payload.face_encoding
+        student.department = payload.department
     else:
         # Check if student_id is already used by someone else
         existing_id = db.query(User).filter(User.student_id == payload.student_id).first()
@@ -1019,6 +1020,7 @@ async def onboard_student(
             student_id=payload.student_id,
             role=UserRole.STUDENT,
             face_encoding=payload.face_encoding,
+            department=payload.department,
             hashed_password="hashed_student_registered_password", # dummy password for self-registration
         )
         db.add(student)

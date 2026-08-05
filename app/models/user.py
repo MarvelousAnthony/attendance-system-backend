@@ -64,6 +64,11 @@ class User(Base):
         nullable=True,
         doc="Unique Matric or Student registration number (e.g. 23/0987)"
     )
+    department: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        doc="Student department (e.g. Computer Science)"
+    )
 
     # Bidirectional relationships
     courses: Mapped[List["Course"]] = relationship(
