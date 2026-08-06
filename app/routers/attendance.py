@@ -391,9 +391,11 @@ async def get_session_attendance(
 async def get_course_sessions(course_id: UUID, db: Session = Depends(get_db)):
     """
     Returns a list of all class sessions created for a specific course,
-    along with the count of present/late students.
+    along with the count of present/late/absent students.
     """
     sessions = db.query(ClassSession).filter(ClassSession.course_id == course_id).order_by(ClassSession.start_time.desc()).all()
+    
+    total_students = db.query(User).filter(User.role == UserRole.STUDENT).count()
     
     response_data = []
     for s in sessions:
@@ -408,6 +410,7 @@ async def get_course_sessions(course_id: UUID, db: Session = Depends(get_db)):
         ).count()
         
         total_checkins = present_count + late_count
+        absent_count = max(0, total_students - total_checkins)
         
         response_data.append({
             "id": str(s.id),
@@ -417,10 +420,23 @@ async def get_course_sessions(course_id: UUID, db: Session = Depends(get_db)):
             "require_double_signing": s.require_double_signing,
             "present_count": present_count,
             "late_count": late_count,
+            "absent_count": absent_count,
             "total_checkins": total_checkins
         })
         
     return response_data
+
+
+@router.get(
+    "/sessions",
+    summary="Get all class sessions in the database",
+)
+async def get_all_sessions(db: Session = Depends(get_db)):
+    """
+    Returns a simple list of all created class sessions.
+    """
+    sessions = db.query(ClassSession).all()
+    return [{"id": str(s.id)} for s in sessions]
 
 
 @router.post(
