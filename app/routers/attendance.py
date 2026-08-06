@@ -439,6 +439,93 @@ async def get_all_sessions(db: Session = Depends(get_db)):
     return [{"id": str(s.id)} for s in sessions]
 
 
+@router.get(
+    "/attendance/analytics",
+    summary="Get dynamic weekly attendance trend and arrival distribution metrics",
+)
+async def get_attendance_analytics(db: Session = Depends(get_db)):
+    # 1. Total students in system
+    total_students = db.query(User).filter(User.role == UserRole.STUDENT).count()
+    if total_students == 0:
+        total_students = 1  # prevent division by zero
+        
+    # 2. Get all class sessions
+    sessions = db.query(ClassSession).order_by(ClassSession.start_time.asc()).all()
+    
+    # --- WEEKLY ATTENDANCE TREND ---
+    weekly_data = []
+    if sessions:
+        earliest_time = sessions[0].start_time
+        weeks = {}
+        for s in sessions:
+            days_diff = (s.start_time - earliest_time).days
+            week_idx = (days_diff // 7) + 1
+            if week_idx not in weeks:
+                weeks[week_idx] = []
+            weeks[week_idx].append(s)
+            
+        for w_idx in sorted(weeks.keys()):
+            w_sessions = weeks[w_idx]
+            total_possible_checkins = len(w_sessions) * total_students
+            
+            session_ids = [s.id for s in w_sessions]
+            actual_checkins = db.query(AttendanceRecord).filter(
+                AttendanceRecord.session_id.in_(session_ids),
+                AttendanceRecord.status.in_([AttendanceStatus.PRESENT, AttendanceStatus.LATE])
+            ).count()
+            
+            rate = int((actual_checkins / total_possible_checkins) * 100)
+            weekly_data.append({
+                "week": f"Week {w_idx}",
+                "rate": rate
+            })
+    else:
+        # Default empty trend
+        weekly_data = [{"week": f"Week {i}", "rate": 0} for i in range(1, 9)]
+        
+    # --- ARRIVAL TIME DISTRIBUTION ---
+    bins = {
+        -10: 0,
+        -5: 0,
+        0: 0,
+        5: 0,
+        10: 0,
+        15: 0,
+        20: 0,
+        25: 0,
+        30: 0
+    }
+    
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.status.in_([AttendanceStatus.PRESENT, AttendanceStatus.LATE])
+    ).all()
+    
+    for r in records:
+        s = db.query(ClassSession).filter(ClassSession.id == r.session_id).first()
+        if s:
+            diff_seconds = (r.timestamp - s.start_time).total_seconds()
+            diff_minutes = diff_seconds / 60.0
+            
+            closest_bin = 0
+            min_dist = float('inf')
+            for b in bins.keys():
+                dist = abs(diff_minutes - b)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_bin = b
+            bins[closest_bin] += 1
+            
+    arrival_data = [
+        {"timeOffset": f"{b}m" if b >= 0 else f"{b}m", "students": count}
+        for b, count in sorted(bins.items())
+    ]
+    
+    return {
+        "weekly_attendance": weekly_data,
+        "arrival_distribution": arrival_data
+    }
+
+
 @router.post(
     "/debug/reset",
     status_code=status.HTTP_200_OK,
