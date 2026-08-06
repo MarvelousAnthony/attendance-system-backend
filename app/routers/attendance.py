@@ -384,6 +384,45 @@ async def get_session_attendance(
     return response_data
 
 
+@router.get(
+    "/courses/{course_id}/sessions",
+    summary="Get all past attendance sessions for a course",
+)
+async def get_course_sessions(course_id: UUID, db: Session = Depends(get_db)):
+    """
+    Returns a list of all class sessions created for a specific course,
+    along with the count of present/late students.
+    """
+    sessions = db.query(ClassSession).filter(ClassSession.course_id == course_id).order_by(ClassSession.start_time.desc()).all()
+    
+    response_data = []
+    for s in sessions:
+        present_count = db.query(AttendanceRecord).filter(
+            AttendanceRecord.session_id == s.id,
+            AttendanceRecord.status == AttendanceStatus.PRESENT
+        ).count()
+        
+        late_count = db.query(AttendanceRecord).filter(
+            AttendanceRecord.session_id == s.id,
+            AttendanceRecord.status == AttendanceStatus.LATE
+        ).count()
+        
+        total_checkins = present_count + late_count
+        
+        response_data.append({
+            "id": str(s.id),
+            "start_time": s.start_time.isoformat(),
+            "end_time": s.end_time.isoformat(),
+            "allowed_radius_meters": s.allowed_radius_meters,
+            "require_double_signing": s.require_double_signing,
+            "present_count": present_count,
+            "late_count": late_count,
+            "total_checkins": total_checkins
+        })
+        
+    return response_data
+
+
 @router.post(
     "/debug/reset",
     status_code=status.HTTP_200_OK,
